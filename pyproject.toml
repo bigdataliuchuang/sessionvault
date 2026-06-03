@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-conversations"
+version = "0.1.0"
+description = "Unified conversation manager for AI coding tools (Claude Code, Codex, Cursor)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0.0"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+ai-conversations = "ai_conversations.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
