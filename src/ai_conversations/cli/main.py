@@ -1,4 +1,4 @@
-"""CLI entry point for ai-conversations."""
+"""CLI entry point for sessionvault."""
 
 import argparse
 import sys
@@ -11,7 +11,7 @@ from .serve import cmd_serve
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="ai-conversations",
+        prog="sessionvault",
         description="Unified conversation manager for AI coding tools",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")

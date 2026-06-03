@@ -9,5 +9,5 @@ def cmd_serve(args):
         from ..server.mcp import run_server
         run_server()
     except ImportError:
-        print("MCP support not installed. Install with: pip install 'ai-conversations[mcp]'")
+        print("MCP support not installed. Install with: pip install 'sessionvault[mcp]'")
         sys.exit(1)

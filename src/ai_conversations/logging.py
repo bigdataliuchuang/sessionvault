@@ -1,4 +1,4 @@
-"""Logging configuration for ai-conversations."""
+"""Logging configuration for sessionvault."""
 
 import logging
 import sys

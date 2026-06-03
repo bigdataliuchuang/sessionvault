@@ -11,10 +11,10 @@ def run_server():
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError:
-        print("MCP SDK not installed. Install with: pip install 'ai-conversations[mcp]'")
+        print("MCP SDK not installed. Install with: pip install 'sessionvault[mcp]'")
         return
 
-    mcp = FastMCP("ai-conversations")
+    mcp = FastMCP("sessionvault")
     db = Database()
 
     @mcp.tool()

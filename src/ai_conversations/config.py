@@ -1,4 +1,4 @@
-"""Configuration management for ai-conversations."""
+"""Configuration management for sessionvault."""
 
 import os
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from pathlib import Path
 @dataclass
 class Config:
     """Global configuration."""
-    data_dir: Path = field(default_factory=lambda: Path.home() / ".ai-conversations")
+    data_dir: Path = field(default_factory=lambda: Path.home() / ".sessionvault")
     log_level: str = "INFO"
     db_name: str = "data.db"
     retention_days: int = 30

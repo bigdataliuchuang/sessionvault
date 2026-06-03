@@ -57,4 +57,4 @@ class TestToolPaths:
 
     def test_data_dir_uses_home(self):
         result = get_data_dir()
-        assert ".ai-conversations" in str(result)
+        assert ".sessionvault" in str(result)

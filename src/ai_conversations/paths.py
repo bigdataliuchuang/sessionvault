@@ -71,7 +71,7 @@ def get_antigravity_state_db() -> Path:
 
 def get_data_dir() -> Path:
     """Our own data directory for storing the unified database."""
-    return Path.home() / ".ai-conversations"
+    return Path.home() / ".sessionvault"
 
 
 def get_db_path() -> Path:

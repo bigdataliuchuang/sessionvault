@@ -1,4 +1,4 @@
-# AI Conversations Manager — 项目规范
+# SessionVault — 项目规范
 
 ## 1. 项目概述
 
@@ -54,7 +54,7 @@ def get_app_support_dir():
 
 ### 3.1 数据同步（Sync）
 
-**命令：** `ai-conversations sync [选项]`
+**命令：** `sessionvault sync [选项]`
 
 | 选项 | 说明 |
 |---|---|
@@ -66,12 +66,12 @@ def get_app_support_dir():
 **行为：**
 1. 读取指定工具的原始对话数据
 2. 转换为统一格式
-3. 写入 SQLite 数据库（`~/.ai-conversations/data.db`）
+3. 写入 SQLite 数据库（`~/.sessionvault/data.db`）
 4. 增量同步：用 session_id 去重，只写新数据
 
 ### 3.2 搜索（Search）
 
-**命令：** `ai-conversations search <关键词> [选项]`
+**命令：** `sessionvault search <关键词> [选项]`
 
 | 选项 | 说明 |
 |---|---|
@@ -108,8 +108,8 @@ def get_app_support_dir():
 ```json
 {
   "mcpServers": {
-    "ai-conversations": {
-      "command": "ai-conversations",
+    "sessionvault": {
+      "command": "sessionvault",
       "args": ["serve"]
     }
   }
@@ -290,7 +290,7 @@ def decode_project_dir(dirname: str) -> str:
 ## 6. 项目结构
 
 ```
-ai-conversations/
+sessionvault/
 ├── SPEC.md                         # 本文件
 ├── README.md                       # 用户文档
 ├── pyproject.toml                  # 项目配置 + 依赖
@@ -328,7 +328,7 @@ ai-conversations/
 | MCP SDK | **mcp**（官方 Python SDK） | Anthropic 官方维护 |
 | 数据库 | **SQLite**（内置） | FTS5 全文搜索，无需安装 |
 | 测试 | **pytest** | 标准选择 |
-| 打包 | **pip + pyproject.toml** | `pip install ai-conversations` |
+| 打包 | **pip + pyproject.toml** | `pip install sessionvault` |
 | Web UI（P2）| **FastAPI + Vue/React** | 后期再定 |
 
 **外部依赖最小化原则：**
@@ -343,29 +343,29 @@ ai-conversations/
 ### 安装
 
 ```bash
-pip install ai-conversations
+pip install sessionvault
 ```
 
 ### 命令行使用
 
 ```bash
 # 全量同步
-ai-conversations sync
+sessionvault sync
 
 # 只同步 Claude Code 和 Codex，最近 7 天
-ai-conversations sync --tool claude-code,codex --since 7d
+sessionvault sync --tool claude-code,codex --since 7d
 
 # 搜索
-ai-conversations search "牙齿" --tool codex
+sessionvault search "牙齿" --tool codex
 
 # 列出会话
-ai-conversations sessions --tool cursor --project medical
+sessionvault sessions --tool cursor --project medical
 
 # 导出某个会话为 Markdown
-ai-conversations export <session-id> --format markdown
+sessionvault export <session-id> --format markdown
 
 # 启动 MCP server
-ai-conversations serve
+sessionvault serve
 ```
 
 ### MCP 配置（Cursor / Claude Code）
@@ -374,8 +374,8 @@ ai-conversations serve
 ```json
 {
   "mcpServers": {
-    "ai-conversations": {
-      "command": "ai-conversations",
+    "sessionvault": {
+      "command": "sessionvault",
       "args": ["serve"]
     }
   }
@@ -394,8 +394,8 @@ ai-conversations serve
 以下问题需要用户确认后才能开始实现：
 
 ### Q1: 数据存储位置
-- **选项 A：** `~/.ai-conversations/`（默认，用户主目录下）
-- **选项 B：** 项目目录下（如 `~/Projects/ai-conversations/data/`）
+- **选项 A：** `~/.sessionvault/`（默认，用户主目录下）
+- **选项 B：** 项目目录下（如 `~/Projects/sessionvault/data/`）
 - **选项 C：** 让用户通过配置文件指定
 
 ### Q2: Antigravity

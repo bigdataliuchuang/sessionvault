@@ -1,4 +1,4 @@
-# AI Conversations Manager
+# SessionVault
 
 统一提取、管理、搜索多个 AI 编程工具的本地对话历史。
 
@@ -31,45 +31,45 @@ pip install -e ".[mcp]"
 
 ```bash
 # 同步所有工具
-ai-conversations sync
+sessionvault sync
 
 # 只同步某个工具
-ai-conversations sync --tool claude-code
-ai-conversations sync --tool codex
-ai-conversations sync --tool cursor
+sessionvault sync --tool claude-code
+sessionvault sync --tool codex
+sessionvault sync --tool cursor
 
 # 只同步最近 7 天
-ai-conversations sync --since 7d
+sessionvault sync --since 7d
 
 # 预览不写入
-ai-conversations sync --dry-run
+sessionvault sync --dry-run
 ```
 
 ### 2. 搜索对话
 
 ```bash
 # 搜索关键词
-ai-conversations search "牙齿"
+sessionvault search "牙齿"
 
 # 按工具过滤
-ai-conversations search "医疗数据" --tool codex
+sessionvault search "医疗数据" --tool codex
 
 # 按项目过滤
-ai-conversations search "导诊" --project medical
+sessionvault search "导诊" --project medical
 ```
 
 ### 3. 查看统计
 
 ```bash
-ai-conversations stats
-ai-conversations projects
-ai-conversations sessions
+sessionvault stats
+sessionvault projects
+sessionvault sessions
 ```
 
 ### 4. 导出会话
 
 ```bash
-ai-conversations export <session-id>
+sessionvault export <session-id>
 ```
 
 ## MCP 集成
@@ -83,7 +83,7 @@ ai-conversations export <session-id>
 ```json
 {
   "mcpServers": {
-    "ai-conversations": {
+    "sessionvault": {
       "command": "python3",
       "args": ["-m", "ai_conversations.mcp_server"]
     }
@@ -100,7 +100,7 @@ ai-conversations export <session-id>
 ```json
 {
   "mcpServers": {
-    "ai-conversations": {
+    "sessionvault": {
       "command": "python3",
       "args": ["-m", "ai_conversations.mcp_server"]
     }
@@ -116,7 +116,7 @@ ai-conversations export <session-id>
 - "列出我所有工具的项目"
 - "我在 Codex 里讨论过什么？"
 
-AI 会自动调用 `ai-conversations` 工具搜索并返回结果。
+AI 会自动调用 `sessionvault` 工具搜索并返回结果。
 
 ## 数据来源
 
@@ -132,7 +132,7 @@ AI 会自动调用 `ai-conversations` 工具搜索并返回结果。
 ## 项目结构
 
 ```
-ai-conversations/
+sessionvault/
 ├── pyproject.toml
 ├── src/ai_conversations/
 │   ├── cli.py              # CLI 入口
