@@ -1,5 +1,9 @@
 # SessionVault
 
+[![PyPI version](https://img.shields.io/pypi/v/sessionvault.svg)](https://pypi.org/project/sessionvault/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+
 统一提取、管理、搜索多个 AI 编程工具的本地对话历史。
 
 **支持工具：** Claude Code · Codex CLI / App · Cursor · Antigravity

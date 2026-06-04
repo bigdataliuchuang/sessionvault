@@ -81,6 +81,16 @@ CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
     INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
     INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
 END;
+
+CREATE TABLE IF NOT EXISTS usage_stats (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    sync_count INTEGER DEFAULT 0,
+    search_count INTEGER DEFAULT 0,
+    last_sync_time TEXT,
+    total_queries INTEGER DEFAULT 0
+);
+
+INSERT OR IGNORE INTO usage_stats (id) VALUES (1);
 """
 
 
@@ -153,6 +163,26 @@ class Database:
                    VALUES (?, ?, ?, ?, ?)""",
                 (msg.conversation_id, msg.role, msg.content, msg.timestamp, msg.sequence)
             )
+        self.conn.commit()
+
+    def increment_sync_stats(self):
+        """Record that a sync operation occurred. Call after each sync."""
+        self.conn.execute(
+            """UPDATE usage_stats
+               SET sync_count = sync_count + 1,
+                   last_sync_time = CURRENT_TIMESTAMP
+               WHERE id = 1"""
+        )
+        self.conn.commit()
+
+    def increment_search_stats(self):
+        """Record that a search query occurred. Call after each search."""
+        self.conn.execute(
+            """UPDATE usage_stats
+               SET search_count = search_count + 1,
+                   total_queries = total_queries + 1
+               WHERE id = 1"""
+        )
         self.conn.commit()
 
     def search(
@@ -273,10 +303,23 @@ class Database:
         by_tool = self.conn.execute(
             "SELECT tool, COUNT(*) as count FROM conversations GROUP BY tool"
         ).fetchall()
+        row = self.conn.execute("SELECT * FROM usage_stats WHERE id = 1").fetchone()
+        usage = {
+            "sync_count": row["sync_count"] if row else 0,
+            "search_count": row["search_count"] if row else 0,
+            "last_sync_time": row["last_sync_time"] if row else None,
+            "total_queries": row["total_queries"] if row else 0,
+        } if row else {
+            "sync_count": 0,
+            "search_count": 0,
+            "last_sync_time": None,
+            "total_queries": 0,
+        }
         return {
             "total_conversations": total_conv,
             "total_messages": total_msg,
             "by_tool": {row["tool"]: row["count"] for row in by_tool},
+            "usage": usage,
         }
 
     def get_extended_stats(self) -> dict:

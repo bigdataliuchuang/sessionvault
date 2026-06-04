@@ -22,6 +22,7 @@ def cmd_search(args):
         role=args.role,
         limit=args.limit,
     )
+    db.increment_search_stats()
     db.close()
 
     if not results:
@@ -285,3 +286,10 @@ def cmd_stats(args):
     print(f"\nBy tool:")
     for tool, count in stats["by_tool"].items():
         print(f"  {tool:15s}: {count} conversations")
+    print(f"\nUsage:")
+    usage = stats["usage"]
+    print(f"  Sync count: {usage['sync_count']}")
+    print(f"  Search count: {usage['search_count']}")
+    print(f"  Total queries: {usage['total_queries']}")
+    if usage["last_sync_time"]:
+        print(f"  Last sync: {usage['last_sync_time']}")

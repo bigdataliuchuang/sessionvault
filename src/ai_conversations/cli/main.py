@@ -5,6 +5,7 @@ import sys
 
 from .. import __version__
 from ..logging import setup_logging
+from ..update import print_update_check
 from .sync import cmd_sync
 from .search import cmd_search, cmd_sessions, cmd_projects, cmd_stats, cmd_export
 from .serve import cmd_serve
@@ -54,9 +55,10 @@ Examples:
   sessionvault web --port 9090                   # Launch web UI on port 9090
 
 Options:
-  -v, --verbose    Enable debug logging
-  -h, --help       Show help message
-  --version        Show version information
+  -v, --verbose            Enable debug logging
+  -h, --help               Show help message
+  --version                Show version information
+  --no-update-check        Skip the PyPI update check on startup
 """
 
 
@@ -86,6 +88,12 @@ def main():
         "--version", action="version", version=f"%(prog)s {__version__}"
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        default=False,
+        help="Skip the PyPI update check on startup",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     # sync
@@ -184,6 +192,10 @@ def main():
     args = parser.parse_args()
 
     setup_logging(verbose=args.verbose)
+
+    # Check for updates (non-blocking, best-effort)
+    if not args.no_update_check:
+        print_update_check()
 
     if not args.command:
         parser.print_help()

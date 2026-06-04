@@ -152,6 +152,9 @@ def cmd_sync(args):
             console.print(f"[yellow]Done with {errors} error(s). {total} conversations synced.[/yellow]")
         else:
             console.print(f"[green]Done. {total} conversations synced.[/green]")
+
+        if total > 0 and not args.dry_run:
+            db.increment_sync_stats()
     else:
         # Fallback without rich
         total = 0
@@ -194,5 +197,8 @@ def cmd_sync(args):
             logger.warning(f"Done with {errors} error(s). {total} conversations synced.")
         else:
             logger.info(f"Done. {total} conversations synced.")
+
+        if total > 0 and not args.dry_run:
+            db.increment_sync_stats()
 
     db.close()
