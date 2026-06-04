@@ -235,3 +235,60 @@ class Database:
             "total_messages": total_msg,
             "by_tool": {row["tool"]: row["count"] for row in by_tool},
         }
+
+    def get_extended_stats(self) -> dict:
+        """Get extended statistics with daily breakdowns for charting."""
+        # Conversations per tool
+        by_tool = self.conn.execute(
+            "SELECT tool, COUNT(*) as count FROM conversations GROUP BY tool ORDER BY count DESC"
+        ).fetchall()
+
+        # Daily conversation counts
+        daily_conversations = self.conn.execute(
+            """SELECT DATE(started_at) as day, COUNT(*) as count
+               FROM conversations
+               WHERE started_at IS NOT NULL
+               GROUP BY day ORDER BY day"""
+        ).fetchall()
+
+        # Daily message counts
+        daily_messages = self.conn.execute(
+            """SELECT DATE(m.timestamp) as day, COUNT(*) as count
+               FROM messages m
+               WHERE m.timestamp IS NOT NULL
+               GROUP BY day ORDER BY day"""
+        ).fetchall()
+
+        # Daily message counts per tool
+        daily_tool_messages = self.conn.execute(
+            """SELECT DATE(m.timestamp) as day, c.tool, COUNT(*) as count
+               FROM messages m
+               JOIN conversations c ON c.id = m.conversation_id
+               WHERE m.timestamp IS NOT NULL
+               GROUP BY day, c.tool
+               ORDER BY day"""
+        ).fetchall()
+
+        # Top projects
+        top_projects = self.conn.execute(
+            """SELECT project, COUNT(*) as count
+               FROM conversations
+               GROUP BY project ORDER BY count DESC LIMIT 10"""
+        ).fetchall()
+
+        # Messages per role
+        by_role = self.conn.execute(
+            "SELECT role, COUNT(*) as count FROM messages GROUP BY role"
+        ).fetchall()
+
+        return {
+            "by_tool": {row["tool"]: row["count"] for row in by_tool},
+            "daily_conversations": [{"date": row["day"], "count": row["count"]} for row in daily_conversations],
+            "daily_messages": [{"date": row["day"], "count": row["count"]} for row in daily_messages],
+            "daily_tool_messages": [
+                {"date": row["day"], "tool": row["tool"], "count": row["count"]}
+                for row in daily_tool_messages
+            ],
+            "top_projects": [{"project": row["project"], "count": row["count"]} for row in top_projects],
+            "by_role": {row["role"]: row["count"] for row in by_role},
+        }

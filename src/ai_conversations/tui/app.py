@@ -16,9 +16,16 @@ class SessionVaultTUI(App):
     CSS_PATH = "style.tcss"
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("s", "focus_search", "Search", show=True),
+        Binding("j", "cursor_down", "Down", show=True),
+        Binding("k", "cursor_up", "Up", show=True),
+        Binding("/", "focus_search", "Search", show=True),
+        Binding("s", "focus_search", "Search", show=False),
+        Binding("enter", "open_detail", "Open", show=True),
+        Binding("escape", "go_back", "Back", show=True),
+        Binding("r", "refresh", "Refresh", show=True),
+        Binding("o", "export", "Export", show=True),
         Binding("p", "show_projects", "Projects", show=True),
-        Binding("e", "export", "Export", show=True),
+        Binding("e", "export", "Export", show=False),
     ]
 
     def __init__(self):
@@ -97,6 +104,32 @@ class SessionVaultTUI(App):
 
     def action_focus_search(self):
         self.query_one("#search-input").focus()
+
+    def action_cursor_down(self):
+        table = self.query_one("#results-table", DataTable)
+        if table.row_count > 0:
+            table.move_cursor(row=min(table.cursor_row + 1, table.row_count - 1))
+
+    def action_cursor_up(self):
+        table = self.query_one("#results-table", DataTable)
+        if table.row_count > 0:
+            table.move_cursor(row=max(table.cursor_row - 1, 0))
+
+    def action_open_detail(self):
+        table = self.query_one("#results-table", DataTable)
+        row = table.cursor_row
+        if row < len(self.current_results):
+            item = self.current_results[row]
+            session_id = item.get("session_id", item.get("id", ""))
+            if session_id:
+                self.show_detail(session_id)
+
+    def action_go_back(self):
+        if self.screen_stack and len(self.screen_stack) > 1:
+            self.pop_screen()
+
+    def action_refresh(self):
+        self.load_sessions()
 
     def action_show_projects(self):
         projects = self.db.list_projects()

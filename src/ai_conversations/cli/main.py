@@ -58,6 +58,17 @@ def main():
     # export
     p_export = subparsers.add_parser("export", help="Export a session as Markdown")
     p_export.add_argument("session_id", help="Session ID to export")
+    p_export.add_argument(
+        "--obsidian",
+        action="store_true",
+        default=False,
+        help="Export as Obsidian-compatible markdown with YAML frontmatter",
+    )
+    p_export.add_argument(
+        "--output",
+        default=None,
+        help="Output directory for Obsidian export (default: current directory)",
+    )
     p_export.set_defaults(func=cmd_export)
 
     # projects

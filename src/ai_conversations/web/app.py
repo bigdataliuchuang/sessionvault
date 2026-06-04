@@ -53,12 +53,58 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .message-role { font-weight: bold; font-size: 12px; margin-bottom: 5px; }
         .message-content { white-space: pre-wrap; font-size: 13px; }
         .export-btn { margin-top: 15px; padding: 8px 16px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; }
+        /* Charts */
+        .charts-section { display: none; margin-bottom: 20px; }
+        .charts-section.active { display: block; }
+        .charts-toggle { padding: 8px 16px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; color: #8b949e; cursor: pointer; font-size: 13px; margin-bottom: 15px; }
+        .charts-toggle:hover { color: #c9d1d9; border-color: #58a6ff; }
+        .charts-toggle.active { color: #58a6ff; border-color: #58a6ff; }
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        @media (max-width: 768px) { .chart-grid { grid-template-columns: 1fr; } }
+        .chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+        .chart-card h3 { color: #58a6ff; font-size: 14px; margin-bottom: 15px; }
+        /* Horizontal bar chart */
+        .hbar { display: flex; flex-direction: column; gap: 8px; }
+        .hbar-row { display: flex; align-items: center; gap: 10px; }
+        .hbar-label { width: 110px; font-size: 12px; color: #8b949e; text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hbar-track { flex: 1; height: 22px; background: #21262d; border-radius: 4px; overflow: hidden; position: relative; }
+        .hbar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: bold; color: #fff; min-width: 30px; }
+        .hbar-fill.tool-claude-code { background: #1f6feb; }
+        .hbar-fill.tool-codex { background: #238636; }
+        .hbar-fill.tool-cursor { background: #da3633; }
+        .hbar-fill.tool-default { background: #8b949e; }
+        /* Vertical bar chart */
+        .vbar { display: flex; align-items: flex-end; gap: 2px; height: 140px; padding-top: 10px; }
+        .vbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
+        .vbar-bar { width: 100%; max-width: 30px; border-radius: 3px 3px 0 0; transition: height 0.6s ease; position: relative; }
+        .vbar-bar:hover { opacity: 0.85; }
+        .vbar-bar .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #30363d; color: #c9d1d9; padding: 4px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap; z-index: 10; }
+        .vbar-bar:hover .tooltip { display: block; }
+        .vbar-date { font-size: 10px; color: #8b949e; margin-top: 6px; writing-mode: vertical-lr; text-orientation: mixed; max-height: 70px; overflow: hidden; }
+        .vbar-empty { color: #8b949e; font-size: 13px; text-align: center; padding: 40px 0; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔐 SessionVault</h1>
         <div class="stats" id="stats"></div>
+        <button class="charts-toggle" onclick="toggleCharts()" id="charts-toggle">📊 统计图表</button>
+        <div class="charts-section" id="charts-section">
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3>对话数 / 工具</h3>
+                    <div class="hbar" id="chart-tool-bar"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>每日对话趋势</h3>
+                    <div id="chart-daily-conv"></div>
+                </div>
+                <div class="chart-card" style="grid-column: 1 / -1;">
+                    <h3>每日消息趋势</h3>
+                    <div id="chart-daily-msg"></div>
+                </div>
+            </div>
+        </div>
         <div class="search-bar">
             <input type="text" id="search" placeholder="搜索对话..." autofocus>
             <button onclick="search()">搜索</button>
@@ -180,6 +226,61 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
         document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
         loadStats(); loadToolSessions('all');
+
+        let chartsVisible = false;
+        let chartsLoaded = false;
+        function toggleCharts() {
+            chartsVisible = !chartsVisible;
+            const section = document.getElementById('charts-section');
+            const btn = document.getElementById('charts-toggle');
+            section.classList.toggle('active', chartsVisible);
+            btn.classList.toggle('active', chartsVisible);
+            if (chartsVisible && !chartsLoaded) loadExtendedStats();
+        }
+        async function loadExtendedStats() {
+            const res = await fetch('/api/stats/extended');
+            const data = await res.json();
+            renderToolBar(data.by_tool || {});
+            renderDailyChart('chart-daily-conv', data.daily_conversations || [], 'date', 'count');
+            renderDailyChart('chart-daily-msg', data.daily_messages || [], 'date', 'count');
+            chartsLoaded = true;
+        }
+        function renderToolBar(byTool) {
+            const el = document.getElementById('chart-tool-bar');
+            const entries = Object.entries(byTool);
+            if (!entries.length) { el.innerHTML = '<div class="vbar-empty">No data</div>'; return; }
+            const max = Math.max(...entries.map(e => e[1]));
+            const toolColors = {'claude-code': 'tool-claude-code', 'codex': 'tool-codex', 'cursor': 'tool-cursor'};
+            el.innerHTML = entries.map(([tool, count]) => {
+                const pct = max > 0 ? (count / max * 100) : 0;
+                const cls = toolColors[tool] || 'tool-default';
+                return `<div class="hbar-row">
+                    <span class="hbar-label" title="${tool}">${tool}</span>
+                    <div class="hbar-track"><div class="hbar-fill ${cls}" style="width:${Math.max(pct, 5)}%">${count}</div></div>
+                </div>`;
+            }).join('');
+        }
+        function renderDailyChart(elId, items, dateKey, countKey) {
+            const el = document.getElementById(elId);
+            if (!items.length) { el.innerHTML = '<div class="vbar-empty">No data</div>'; return; }
+            // Show last 30 days max
+            const data = items.slice(-30);
+            const max = Math.max(...data.map(d => d[countKey]));
+            const barColor = elId.includes('conv') ? '#58a6ff' : '#3fb950';
+            // Limit visible labels to avoid clutter
+            const skipFactor = data.length > 15 ? Math.ceil(data.length / 12) : 1;
+            el.innerHTML = '<div class="vbar">' + data.map((d, i) => {
+                const pct = max > 0 ? (d[countKey] / max * 100) : 0;
+                const dateLabel = (d[dateKey] || '').slice(5); // MM-DD
+                const showDate = i % skipFactor === 0 || i === data.length - 1;
+                return `<div class="vbar-col">
+                    <div class="vbar-bar" style="height:${Math.max(pct, 2)}%;background:${barColor}">
+                        <span class="tooltip">${d[dateKey]}: ${d[countKey]}</span>
+                    </div>
+                    ${showDate ? `<span class="vbar-date">${dateLabel}</span>` : ''}
+                </div>`;
+            }).join('') + '</div>';
+        }
     </script>
 </body>
 </html>"""
@@ -204,6 +305,13 @@ def create_app():
     async def stats():
         db = Database()
         result = db.get_stats()
+        db.close()
+        return result
+
+    @app.get("/api/stats/extended")
+    async def stats_extended():
+        db = Database()
+        result = db.get_extended_stats()
         db.close()
         return result
 
