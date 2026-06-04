@@ -16,13 +16,19 @@
 ## 安装
 
 ```bash
-pip install -e .
+pip install sessionvault
 ```
 
 如果需要 MCP 功能：
 
 ```bash
-pip install -e ".[mcp]"
+pip install sessionvault[mcp]
+```
+
+如果需要完整功能（MCP + TUI + Web UI）：
+
+```bash
+pip install sessionvault[all]
 ```
 
 ## 快速开始
