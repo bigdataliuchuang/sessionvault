@@ -1,12 +1,45 @@
 """Sync subcommand."""
 
 import logging
+import sqlite3
 import sys
 
 from ..db import Database
 from ..extractors import EXTRACTORS
 
 logger = logging.getLogger("ai_conversations")
+
+
+def _classify_error(tool_name, error):
+    """Classify an exception into a user-friendly (message, hint, severity) tuple.
+
+    Returns:
+        (message, hint, severity) where severity is one of 'error', 'warning'.
+    """
+    if isinstance(error, FileNotFoundError):
+        return (
+            f"Data directory not found for {tool_name}",
+            "Is the tool installed? You may need to run it at least once to create its data directory.",
+            "error",
+        )
+    if isinstance(error, PermissionError):
+        return (
+            f"Permission denied reading {tool_name} data",
+            "Check file permissions. You may need to adjust access with: chmod -R u+rw <tool_data_dir>",
+            "error",
+        )
+    if isinstance(error, sqlite3.OperationalError) and "locked" in str(error):
+        return (
+            "Database is locked",
+            "Another SessionVault process may be running. Close other instances or wait a moment and retry.",
+            "error",
+        )
+    # Default: preserve the original error message
+    return (
+        f"Error syncing {tool_name}",
+        str(error),
+        "error",
+    )
 
 
 def cmd_sync(args):
@@ -19,7 +52,48 @@ def cmd_sync(args):
     except ImportError:
         HAS_RICH = False
 
-    db = Database()
+    try:
+        db = Database()
+    except PermissionError as e:
+        msg = f"Permission denied opening database: {e}"
+        hint = "Check file permissions on ~/.sessionvault/data.db. You may need to adjust access."
+        if HAS_RICH:
+            console = Console()
+            console.print(f"\n  [bold red]Permission denied[/bold red] opening database")
+            console.print(f"  [dim]{msg}[/dim]")
+            console.print(f"  [dim italic]{hint}[/dim italic]\n")
+        else:
+            logger.error(msg)
+            logger.info(hint)
+        sys.exit(1)
+    except sqlite3.OperationalError as e:
+        if "locked" in str(e):
+            msg = "Database is locked"
+            hint = "Another SessionVault process may be running. Close other instances or wait a moment and retry."
+        else:
+            msg = f"Database error: {e}"
+            hint = "The database may be corrupt. Try deleting ~/.sessionvault/data.db and re-syncing."
+        if HAS_RICH:
+            console = Console()
+            console.print(f"\n  [bold red]{msg}[/bold red]")
+            console.print(f"  [dim italic]{hint}[/dim italic]\n")
+        else:
+            logger.error(msg)
+            logger.info(hint)
+        sys.exit(1)
+    except OSError as e:
+        msg = f"Cannot open database: {e}"
+        hint = "Ensure ~/.sessionvault/ directory is accessible."
+        if HAS_RICH:
+            console = Console()
+            console.print(f"\n  [bold red]Database error[/bold red]")
+            console.print(f"  [dim]{msg}[/dim]")
+            console.print(f"  [dim italic]{hint}[/dim italic]\n")
+        else:
+            logger.error(msg)
+            logger.info(hint)
+        sys.exit(1)
+
     tool_filter = [t.strip() for t in args.tool.split(",")] if args.tool else list(EXTRACTORS.keys())
 
     if HAS_RICH:
@@ -61,7 +135,9 @@ def cmd_sync(args):
                         count += 1
                         progress.update(task, advance=1, description=f"{tool_name}: {count} saved")
                 except Exception as e:
-                    console.print(f"  [red]Error: {e}[/red]")
+                    msg, hint, _ = _classify_error(tool_name, e)
+                    console.print(f"  [red]{msg}[/red]")
+                    console.print(f"  [dim italic]{hint}[/dim italic]")
                     errors += 1
                     continue
 
@@ -103,7 +179,9 @@ def cmd_sync(args):
                         db.save_conversation(conv)
                     count += 1
             except Exception as e:
-                logger.error(f"Error syncing {tool_name}: {e}")
+                msg, hint, _ = _classify_error(tool_name, e)
+                logger.error(msg)
+                logger.info(hint)
                 errors += 1
                 continue
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -61,7 +64,7 @@ def cmd_sessions(args):
 
 
 def cmd_export(args):
-    """Export a session as Markdown."""
+    """Export a session as Markdown, JSON, or CSV."""
     db = Database()
     session = db.get_session(args.session_id)
     db.close()
@@ -70,10 +73,27 @@ def cmd_export(args):
         print(f"Session not found: {args.session_id}")
         return
 
-    if getattr(args, "obsidian", False):
-        export_obsidian(session, output_dir=getattr(args, "output", None))
-        return
+    # Determine format: --format flag takes precedence over legacy --obsidian
+    fmt = getattr(args, "format", None)
+    if fmt is None:
+        if getattr(args, "obsidian", False):
+            fmt = "obsidian"
+        else:
+            fmt = "markdown"
 
+    if fmt == "obsidian":
+        export_obsidian(session, output_dir=getattr(args, "output", None))
+    elif fmt == "json":
+        export_json(session, output=getattr(args, "output", None))
+    elif fmt == "csv":
+        export_csv(session, output=getattr(args, "output", None))
+    else:
+        # markdown (default)
+        _export_markdown(session)
+
+
+def _export_markdown(session: dict) -> None:
+    """Print session as Markdown to stdout."""
     print("---")
     print(f"tool: {session['tool']}")
     print(f"project: {session['project']}")
@@ -89,6 +109,73 @@ def cmd_export(args):
         print(f"## [{msg['role']}] {ts}")
         print(msg["content"])
         print()
+
+
+def export_json(session: dict, output: str | None = None) -> None:
+    """Export session as JSON.
+
+    Writes to a file when *output* is a directory path, otherwise prints to stdout.
+    """
+    payload = {
+        "tool": session["tool"],
+        "project": session["project"],
+        "session_id": session["session_id"],
+        "title": session["title"],
+        "started_at": session["started_at"],
+        "ended_at": session.get("ended_at"),
+        "message_count": session["message_count"],
+        "messages": [
+            {
+                "role": msg["role"],
+                "content": msg["content"],
+                "timestamp": msg["timestamp"],
+                "sequence": msg.get("sequence"),
+            }
+            for msg in session.get("messages", [])
+        ],
+    }
+
+    if output:
+        dest = Path(output)
+        if dest.is_dir():
+            filename = f"{session['session_id']}.json"
+            dest = dest / filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Exported JSON to: {dest}")
+    else:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def export_csv(session: dict, output: str | None = None) -> None:
+    """Export session messages as CSV.
+
+    Writes to a file when *output* is a directory path, otherwise prints to stdout.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["role", "content", "timestamp", "sequence"])
+
+    for msg in session.get("messages", []):
+        writer.writerow([
+            msg["role"],
+            msg["content"],
+            msg["timestamp"],
+            msg.get("sequence", ""),
+        ])
+
+    csv_text = buf.getvalue()
+
+    if output:
+        dest = Path(output)
+        if dest.is_dir():
+            filename = f"{session['session_id']}.csv"
+            dest = dest / filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(csv_text, encoding="utf-8")
+        print(f"Exported CSV to: {dest}")
+    else:
+        print(csv_text, end="")
 
 
 def export_obsidian(session: dict, output_dir: str | None = None) -> Path:

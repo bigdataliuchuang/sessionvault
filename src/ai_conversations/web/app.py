@@ -1,6 +1,12 @@
 """Web UI for SessionVault using FastAPI."""
 
+import csv
+import importlib
+import io
 import json
+import shutil
+import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 from ..db import Database
@@ -53,6 +59,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .message-role { font-weight: bold; font-size: 12px; margin-bottom: 5px; }
         .message-content { white-space: pre-wrap; font-size: 13px; }
         .export-btn { margin-top: 15px; padding: 8px 16px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; }
+        .api-bar { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        .api-btn { padding: 6px 14px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; color: #8b949e; cursor: pointer; font-size: 12px; }
+        .api-btn:hover { color: #c9d1d9; border-color: #58a6ff; }
+        .api-btn.running { color: #d29922; border-color: #d29922; }
+        .api-btn.ok { color: #3fb950; border-color: #3fb950; }
+        .api-btn.fail { color: #f85149; border-color: #f85149; }
         /* Charts */
         .charts-section { display: none; margin-bottom: 20px; }
         .charts-section.active { display: block; }
@@ -89,6 +101,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <h1>🔐 SessionVault</h1>
         <div class="stats" id="stats"></div>
         <button class="charts-toggle" onclick="toggleCharts()" id="charts-toggle">📊 统计图表</button>
+        <div class="api-bar">
+            <button class="api-btn" onclick="apiExportJson()">⬇ 导出 JSON</button>
+            <button class="api-btn" onclick="apiExportCsv()">⬇ 导出 CSV</button>
+            <button class="api-btn" onclick="apiBackup()">💾 创建备份</button>
+            <button class="api-btn" onclick="apiDoctor()">🩺 健康检查</button>
+        </div>
         <div class="charts-section" id="charts-section">
             <div class="chart-grid">
                 <div class="chart-card">
@@ -227,6 +245,78 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
         loadStats(); loadToolSessions('all');
 
+        // --- REST API actions ---
+        function setApiBtn(btn, state) {
+            btn.classList.remove('running', 'ok', 'fail');
+            if (state) btn.classList.add(state);
+        }
+        async function apiExportJson() {
+            const btn = event.target;
+            setApiBtn(btn, 'running');
+            try {
+                const res = await fetch('/api/export/json');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'sessions-export.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                setApiBtn(btn, 'ok');
+            } catch (e) { setApiBtn(btn, 'fail'); }
+            setTimeout(() => setApiBtn(btn, ''), 2000);
+        }
+        async function apiExportCsv() {
+            const btn = event.target;
+            setApiBtn(btn, 'running');
+            try {
+                const res = await fetch('/api/export/csv');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'sessions-export.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+                setApiBtn(btn, 'ok');
+            } catch (e) { setApiBtn(btn, 'fail'); }
+            setTimeout(() => setApiBtn(btn, ''), 2000);
+        }
+        async function apiBackup() {
+            const btn = event.target;
+            setApiBtn(btn, 'running');
+            try {
+                const res = await fetch('/api/backup/create');
+                const data = await res.json();
+                if (data.ok) {
+                    setApiBtn(btn, 'ok');
+                    alert('Backup created: ' + data.backup_file);
+                } else {
+                    setApiBtn(btn, 'fail');
+                    alert('Backup failed: ' + (data.error || 'unknown error'));
+                }
+            } catch (e) { setApiBtn(btn, 'fail'); alert('Backup request failed'); }
+            setTimeout(() => setApiBtn(btn, ''), 2000);
+        }
+        async function apiDoctor() {
+            const btn = event.target;
+            setApiBtn(btn, 'running');
+            try {
+                const res = await fetch('/api/doctor');
+                const data = await res.json();
+                const lines = [];
+                for (const [section, checks] of Object.entries(data.sections)) {
+                    lines.push('=== ' + section + ' ===');
+                    for (const c of checks) {
+                        lines.push((c.ok ? '[OK]  ' : '[FAIL] ') + c.detail);
+                    }
+                    lines.push('');
+                }
+                lines.push(data.all_ok ? 'All checks passed.' : 'Some checks failed.');
+                alert(lines.join('\\n'));
+                setApiBtn(btn, data.all_ok ? 'ok' : 'fail');
+            } catch (e) { setApiBtn(btn, 'fail'); alert('Doctor request failed'); }
+            setTimeout(() => setApiBtn(btn, ''), 2000);
+        }
+
         let chartsVisible = false;
         let chartsLoaded = false;
         function toggleCharts() {
@@ -357,6 +447,240 @@ def create_app():
             media_type="text/markdown",
             headers={"Content-Disposition": f"attachment; filename=session-{session_id[:8]}.md"},
         )
+
+    @app.get("/api/export/json")
+    async def export_json():
+        """Export all sessions as a JSON array."""
+        db = Database()
+        try:
+            sessions = db.list_sessions(limit=999999)
+            # Attach messages to each session
+            for session in sessions:
+                rows = db.conn.execute(
+                    "SELECT role, content, timestamp, sequence "
+                    "FROM messages WHERE conversation_id = ? ORDER BY sequence",
+                    (session["id"],),
+                ).fetchall()
+                session["messages"] = [dict(r) for r in rows]
+        finally:
+            db.close()
+        return Response(
+            json.dumps(sessions, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=sessions-export.json"},
+        )
+
+    @app.get("/api/export/csv")
+    async def export_csv():
+        """Export all sessions as a CSV file (one row per message)."""
+        db = Database()
+        try:
+            sessions = db.list_sessions(limit=999999)
+        finally:
+            db.close()
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "conversation_id", "tool", "project", "session_id",
+            "title", "started_at", "ended_at", "message_count",
+            "msg_role", "msg_content", "msg_timestamp", "msg_sequence",
+        ])
+
+        db2 = Database()
+        try:
+            for session in sessions:
+                rows = db2.conn.execute(
+                    "SELECT role, content, timestamp, sequence "
+                    "FROM messages WHERE conversation_id = ? ORDER BY sequence",
+                    (session["id"],),
+                ).fetchall()
+                if rows:
+                    for msg in rows:
+                        msg = dict(msg)
+                        writer.writerow([
+                            session["id"], session["tool"], session["project"],
+                            session["session_id"], session.get("title", ""),
+                            session.get("started_at", ""),
+                            session.get("ended_at", ""),
+                            session.get("message_count", 0),
+                            msg["role"], msg["content"],
+                            msg.get("timestamp", ""),
+                            msg.get("sequence", ""),
+                        ])
+                else:
+                    # Session with no messages still gets a row
+                    writer.writerow([
+                        session["id"], session["tool"], session["project"],
+                        session["session_id"], session.get("title", ""),
+                        session.get("started_at", ""),
+                        session.get("ended_at", ""),
+                        session.get("message_count", 0),
+                        "", "", "", "",
+                    ])
+        finally:
+            db2.close()
+
+        return Response(
+            buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=sessions-export.csv"},
+        )
+
+    @app.get("/api/backup/create")
+    async def backup_create():
+        """Create a timestamped backup of the SessionVault database."""
+        from ..config import get_config
+
+        config = get_config()
+        db_path = config.db_path
+
+        if not db_path.exists():
+            return Response(
+                json.dumps({"error": "Database not found", "path": str(db_path)}),
+                status_code=404,
+                media_type="application/json",
+            )
+
+        backup_dir = Path.home() / "sessionvault-backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = backup_dir / f"data_{timestamp}.db"
+
+        try:
+            shutil.copy2(str(db_path), str(backup_file))
+        except OSError as e:
+            return Response(
+                json.dumps({"error": f"Backup failed: {e}"}),
+                status_code=500,
+                media_type="application/json",
+            )
+
+        return {
+            "ok": True,
+            "backup_file": str(backup_file),
+            "database_size": db_path.stat().st_size,
+            "backup_size": backup_file.stat().st_size,
+        }
+
+    @app.get("/api/doctor")
+    async def doctor():
+        """Run health checks and return structured JSON results."""
+        from ..paths import (
+            get_claude_code_dir,
+            get_codex_sessions_dir,
+            get_cursor_dir,
+            get_cursor_state_db,
+            get_antigravity_dir,
+            get_db_path,
+        )
+
+        sections = {}
+
+        # --- Tool data directories ---
+        tool_dirs = [
+            ("Claude Code", str(get_claude_code_dir())),
+            ("Codex sessions", str(get_codex_sessions_dir())),
+            ("Cursor", str(get_cursor_dir())),
+            ("Cursor state DB", str(get_cursor_state_db())),
+            ("Antigravity IDE", str(get_antigravity_dir())),
+        ]
+        dir_results = []
+        for label, path_str in tool_dirs:
+            exists = Path(path_str).exists()
+            dir_results.append({"ok": exists, "detail": f"{label}: {path_str}"})
+        sections["tool_directories"] = dir_results
+
+        # --- Database ---
+        db_path = get_db_path()
+        db_results = []
+
+        if not db_path.exists():
+            db_results.append({"ok": False, "detail": f"Database file not found: {db_path}"})
+        else:
+            db_results.append({"ok": True, "detail": f"Database file exists: {db_path}"})
+            try:
+                conn = sqlite3.connect(str(db_path))
+                conn.row_factory = sqlite3.Row
+            except sqlite3.Error as e:
+                db_results.append({"ok": False, "detail": f"Cannot open database: {e}"})
+                sections["database"] = db_results
+                return {"all_ok": False, "sections": sections}
+
+            # Required tables
+            try:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+            except sqlite3.Error as e:
+                db_results.append({"ok": False, "detail": f"Cannot query sqlite_master: {e}"})
+                conn.close()
+                sections["database"] = db_results
+                return {"all_ok": False, "sections": sections}
+
+            missing = {"conversations", "messages"} - tables
+            if missing:
+                db_results.append({"ok": False, "detail": f"Missing tables: {', '.join(sorted(missing))}"})
+            else:
+                db_results.append({"ok": True, "detail": "Required tables present: conversations, messages"})
+
+            # FTS5
+            has_fts = "messages_fts" in tables
+            db_results.append({
+                "ok": has_fts,
+                "detail": "FTS5 virtual table messages_fts present" if has_fts else "FTS5 virtual table messages_fts missing",
+            })
+
+            # Record counts
+            try:
+                n_conv = conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
+                n_msg = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+                db_results.append({"ok": True, "detail": f"Records: {n_conv} conversations, {n_msg} messages"})
+            except sqlite3.Error as e:
+                db_results.append({"ok": False, "detail": f"Cannot count records: {e}"})
+
+            # Integrity check
+            try:
+                integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity == "ok":
+                    db_results.append({"ok": True, "detail": "Integrity check passed"})
+                else:
+                    db_results.append({"ok": False, "detail": f"Integrity check failed: {integrity}"})
+            except sqlite3.Error as e:
+                db_results.append({"ok": False, "detail": f"Cannot run integrity check: {e}"})
+
+            conn.close()
+
+        sections["database"] = db_results
+
+        # --- Dependencies ---
+        dep_specs = [
+            ("rich", "rich"),
+            ("mcp", "mcp"),
+            ("textual", "textual"),
+            ("fastapi", "fastapi"),
+            ("uvicorn", "uvicorn"),
+        ]
+        dep_results = []
+        for label, module_name in dep_specs:
+            try:
+                mod = importlib.import_module(module_name)
+                version = getattr(mod, "__version__", "unknown")
+                dep_results.append({"ok": True, "detail": f"{label} {version}"})
+            except ImportError:
+                dep_results.append({"ok": False, "detail": f"{label} -- NOT INSTALLED"})
+        sections["dependencies"] = dep_results
+
+        all_ok = all(
+            check["ok"]
+            for section_checks in sections.values()
+            for check in section_checks
+        )
+
+        return {"all_ok": all_ok, "sections": sections}
 
     return app
 

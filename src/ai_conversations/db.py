@@ -1,10 +1,38 @@
 """SQLite database operations with FTS5 full-text search."""
 
+import hashlib
 import sqlite3
+from collections import OrderedDict
 from pathlib import Path
 from typing import List, Optional
 
 from .models import Conversation, Message
+
+
+class _LRUCache:
+    """Thread-unsafe LRU cache backed by OrderedDict. Maxsize 0 disables caching."""
+
+    def __init__(self, maxsize: int = 128):
+        self._maxsize = maxsize
+        self._cache: OrderedDict = OrderedDict()
+
+    def get(self, key: str) -> Optional[list]:
+        if key not in self._cache:
+            return None
+        self._cache.move_to_end(key)
+        return self._cache[key]
+
+    def put(self, key: str, value: list) -> None:
+        if self._maxsize <= 0:
+            return
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        self._cache[key] = value
+        if len(self._cache) > self._maxsize:
+            self._cache.popitem(last=False)
+
+    def clear(self) -> None:
+        self._cache.clear()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -68,11 +96,18 @@ class Database:
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self._query_cache = _LRUCache(maxsize=128)
         self._init_schema()
 
     def _init_schema(self):
         self.conn.executescript(SCHEMA)
         self.conn.commit()
+
+    @staticmethod
+    def _make_cache_key(query: str, *args) -> str:
+        """Build a stable SHA-256 cache key from query text and filter values."""
+        raw = repr((query,) + args)
+        return hashlib.sha256(raw.encode()).hexdigest()
 
     def close(self):
         self.conn.close()
@@ -99,7 +134,8 @@ class Database:
         return file_mtime > row[0] + 0.001
 
     def save_conversation(self, conv: Conversation):
-        """Save a conversation and all its messages."""
+        """Save a conversation and all its messages. Clears the query cache on sync."""
+        self._query_cache.clear()
         self.conn.execute(
             """INSERT OR REPLACE INTO conversations
                (id, tool, project, session_id, title, started_at, ended_at, message_count, file_mtime)
@@ -128,7 +164,12 @@ class Database:
         role: Optional[str] = None,
         limit: int = 20,
     ) -> List[dict]:
-        """Full-text search across all messages."""
+        """Full-text search across all messages. Results are LRU-cached."""
+        cache_key = self._make_cache_key(query, tool, project, date_range, role, limit)
+        cached = self._query_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         sql = """
             SELECT c.id, c.tool, c.project, c.session_id, c.title,
                    c.started_at, m.role, m.content, m.timestamp
@@ -161,7 +202,9 @@ class Database:
         params.append(limit)
 
         rows = self.conn.execute(sql, params).fetchall()
-        return [dict(row) for row in rows]
+        results = [dict(row) for row in rows]
+        self._query_cache.put(cache_key, results)
+        return results
 
     def list_sessions(
         self,

@@ -36,41 +36,66 @@ class CursorExtractor(BaseExtractor):
             # Load project resolution data from ItemTable
             composer_project_map = self._load_composer_project_map(conn)
 
-            # Pre-load ALL bubbles grouped by composer_id
+            # Pre-load ALL bubbles grouped by composer_id (single query)
             bubbles_by_composer = self._load_all_bubbles(conn)
 
-            # Process composers one by one
-            cursor = conn.execute(
+            # Batch load ALL composer data in one query
+            all_composers = conn.execute(
                 "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'"
-            )
-            for row in cursor:
+            ).fetchall()
+
+            total = len(all_composers)
+            processed = 0
+            yielded = 0
+
+            for row in all_composers:
                 try:
                     composer_id = row["key"].replace("composerData:", "")
                     data = json.loads(row["value"])
 
+                    # Early skip: skip sessions with 0 messages before full parse
+                    conversation = data.get("conversation", [])
+                    bubbles = bubbles_by_composer.get(composer_id, [])
+                    if not isinstance(conversation, list) or not conversation:
+                        if not bubbles:
+                            processed += 1
+                            continue
+
                     conv = self._parse_composer(
-                        composer_id, data, composer_project_map,
-                        bubbles_by_composer.get(composer_id, [])
+                        composer_id, data, composer_project_map, bubbles
                     )
                     if not conv:
+                        processed += 1
                         continue
 
                     if since_dt and conv.started_at:
                         try:
                             conv_dt = datetime.fromisoformat(conv.started_at.replace("Z", "+00:00"))
                             if conv_dt < since_dt:
+                                processed += 1
                                 continue
                         except ValueError:
                             pass
 
                     if project and project.lower() not in conv.project.lower():
+                        processed += 1
                         continue
 
                     if conv.message_count > 0:
+                        yielded += 1
                         yield conv
+
+                    processed += 1
+                    # Progress indicator every 100 sessions
+                    if processed % 100 == 0:
+                        logger.info(f"Cursor: processed {processed}/{total}, yielded {yielded}")
+
                 except Exception as e:
                     logger.warning(f"Error parsing composer {row['key'][:50]}: {e}")
+                    processed += 1
                     continue
+
+            logger.info(f"Cursor extraction complete: {yielded}/{total} conversations yielded")
         finally:
             conn.close()
 
