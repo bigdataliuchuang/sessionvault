@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Generator, Optional
 
@@ -180,7 +180,7 @@ class ClaudeCodeExtractor(BaseExtractor):
         if since.endswith("d"):
             try:
                 days = int(since[:-1])
-                return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days)
             except ValueError:
                 pass
         try:

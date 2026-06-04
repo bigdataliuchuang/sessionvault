@@ -7,7 +7,7 @@ import sqlite3
 from collections import defaultdict
 
 logger = logging.getLogger("ai_conversations.cursor")
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Generator, List, Optional
 
@@ -386,7 +386,8 @@ class CursorExtractor(BaseExtractor):
     def _parse_since(since: str) -> Optional[datetime]:
         if since.endswith("d"):
             try:
-                return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                days = int(since[:-1])
+                return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days)
             except ValueError:
                 pass
         try:

@@ -26,9 +26,9 @@ def get_config() -> Config:
     if _config is None:
         _config = Config()
         # Override from environment
-        if v := os.environ.get("OGM_DATA_DIR"):
+        if v := os.environ.get("SESSIONVAULT_DATA_DIR"):
             _config.data_dir = Path(v)
-        if v := os.environ.get("OGM_LOG_LEVEL"):
+        if v := os.environ.get("SESSIONVAULT_LOG_LEVEL"):
             _config.log_level = v
         _config.data_dir.mkdir(parents=True, exist_ok=True)
     return _config

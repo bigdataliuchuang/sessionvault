@@ -3,7 +3,7 @@
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Generator, Optional
 
@@ -202,7 +202,7 @@ class CodexExtractor(BaseExtractor):
         if since.endswith("d"):
             try:
                 days = int(since[:-1])
-                return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                return (datetime.now() - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
             except ValueError:
                 pass
         try:

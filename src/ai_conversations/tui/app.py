@@ -3,6 +3,7 @@
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Label, Static
 
 from ..db import Database
@@ -159,12 +160,16 @@ class SessionVaultTUI(App):
         self.notify(f"Exported to {export_path}")
 
 
-class DetailScreen(Static):
+class DetailScreen(Screen):
     """Simple detail view screen."""
 
     def __init__(self, text: str, session_id: str):
-        super().__init__(text)
+        super().__init__()
+        self.text = text
         self.session_id = session_id
+
+    def compose(self) -> ComposeResult:
+        yield Static(self.text)
 
 
 def run_tui():

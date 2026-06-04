@@ -118,6 +118,73 @@ def run_server():
         return json.dumps(output, ensure_ascii=False)
 
     @mcp.tool()
+    def export_session(session_id: str, format: str = "markdown") -> str:
+        """Export a conversation session in the requested format.
+
+        Args:
+            session_id: The session ID to export
+            format: Output format - "markdown", "json", or "csv" (default: "markdown")
+        """
+        session = db.get_session(session_id)
+        if not session:
+            return json.dumps({"error": f"Session not found: {session_id}"}, ensure_ascii=False)
+
+        messages = session.get("messages", [])
+
+        if format == "json":
+            output = {
+                "tool": session["tool"],
+                "project": session["project"],
+                "session_id": session["session_id"],
+                "title": session.get("title", ""),
+                "started_at": session["started_at"],
+                "message_count": session["message_count"],
+                "messages": [
+                    {
+                        "role": msg["role"],
+                        "content": msg["content"],
+                        "timestamp": msg["timestamp"][:19] if msg["timestamp"] else "",
+                    }
+                    for msg in messages
+                ],
+            }
+            return json.dumps(output, ensure_ascii=False)
+
+        if format == "csv":
+            lines = ["role,timestamp,content"]
+            for msg in messages:
+                ts = msg["timestamp"][:19] if msg["timestamp"] else ""
+                content = msg["content"].replace('"', '""')
+                lines.append(f'"{msg["role"]}","{ts}","{content}"')
+            return "\n".join(lines)
+
+        # Default: markdown
+        title = session.get("title", "Untitled")
+        lines = [
+            f"# {title}",
+            "",
+            f"**Tool:** {session['tool']}  ",
+            f"**Project:** {session['project']}  ",
+            f"**Session:** {session['session_id']}  ",
+            f"**Started:** {session['started_at']}  ",
+            f"**Messages:** {session['message_count']}",
+            "",
+            "---",
+            "",
+        ]
+        for msg in messages:
+            role = msg["role"].capitalize()
+            ts = msg["timestamp"][:19] if msg["timestamp"] else ""
+            lines.append(f"## {role}")
+            if ts:
+                lines.append(f"*{ts}*")
+                lines.append("")
+            lines.append(msg["content"])
+            lines.append("")
+
+        return "\n".join(lines)
+
+    @mcp.tool()
     def list_projects(tool: Optional[str] = None) -> str:
         """List all projects with conversation counts.
 
