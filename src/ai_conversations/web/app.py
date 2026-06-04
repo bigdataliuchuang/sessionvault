@@ -20,8 +20,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .search-bar input { flex: 1; padding: 10px 15px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; color: #c9d1d9; font-size: 14px; }
         .search-bar button { padding: 10px 20px; border: none; border-radius: 6px; background: #238636; color: white; cursor: pointer; font-size: 14px; }
         .search-bar button:hover { background: #2ea043; }
-        .filters { display: flex; gap: 10px; margin-bottom: 20px; }
-        .filters select { padding: 8px 12px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; color: #c9d1d9; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        .tab { padding: 8px 16px; border: 1px solid #30363d; border-radius: 6px 6px 0 0; background: #161b22; color: #8b949e; cursor: pointer; font-size: 13px; border-bottom: none; }
+        .tab:hover { color: #c9d1d9; }
+        .tab.active { background: #0d1117; color: #58a6ff; border-bottom: 2px solid #58a6ff; }
+        .sort-btn { padding: 8px 16px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; color: #8b949e; cursor: pointer; font-size: 13px; margin-left: auto; }
+        .sort-btn:hover { color: #c9d1d9; border-color: #58a6ff; }
         .stats { display: flex; gap: 20px; margin-bottom: 20px; padding: 15px; background: #161b22; border-radius: 6px; border: 1px solid #30363d; }
         .stat { text-align: center; }
         .stat-value { font-size: 24px; font-weight: bold; color: #58a6ff; }
@@ -59,21 +63,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <input type="text" id="search" placeholder="搜索对话..." autofocus>
             <button onclick="search()">搜索</button>
         </div>
-        <div class="filters">
-            <select id="tool-filter" onchange="filterChanged()">
-                <option value="">所有工具</option>
-                <option value="claude-code">Claude Code</option>
-                <option value="codex">Codex</option>
-                <option value="cursor">Cursor</option>
-            </select>
-            <select id="date-filter" onchange="filterChanged()">
-                <option value="">所有时间</option>
-                <option value="7d">最近 7 天</option>
-                <option value="30d">最近 30 天</option>
-                <option value="90d">最近 90 天</option>
-            </select>
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('all', this)">全部</button>
+            <button class="tab" onclick="switchTab('claude-code', this)">🔵 Claude Code</button>
+            <button class="tab" onclick="switchTab('codex', this)">🟢 Codex</button>
+            <button class="tab" onclick="switchTab('cursor', this)">🔴 Cursor</button>
+            <button class="sort-btn" onclick="toggleSort()" id="sort-btn">⬇ 最新在前</button>
         </div>
-        <ul class="results" id="results"></ul>
+        <div id="tab-content">
+            <ul class="results" id="results-all"></ul>
+            <ul class="results" id="results-claude-code" style="display:none"></ul>
+            <ul class="results" id="results-codex" style="display:none"></ul>
+            <ul class="results" id="results-cursor" style="display:none"></ul>
+        </div>
     </div>
     <div class="modal" id="modal">
         <div class="modal-content">
@@ -87,6 +89,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <script>
         let currentSessionId = '';
+        let currentTab = 'all';
+        let sortAsc = false; // false = newest first (desc), true = oldest first (asc)
         async function loadStats() {
             const res = await fetch('/api/stats');
             const data = await res.json();
@@ -96,22 +100,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 ${Object.entries(data.by_tool).map(([t,c]) => `<div class="stat"><div class="stat-value">${c}</div><div class="stat-label">${t}</div></div>`).join('')}
             `;
         }
-        async function search() {
-            const query = document.getElementById('search').value;
-            const tool = document.getElementById('tool-filter').value;
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&tool=${tool}&limit=30`);
-            const data = await res.json();
-            renderResults(data.results || []);
+        function switchTab(tool, btn) {
+            currentTab = tool;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            // Hide all, show selected
+            document.querySelectorAll('.results').forEach(el => el.style.display = 'none');
+            document.getElementById('results-' + tool).style.display = 'block';
+            // Load data for this tab
+            loadToolSessions(tool);
         }
-        async function filterChanged() { await search(); }
-        async function loadSessions() {
-            const tool = document.getElementById('tool-filter').value;
-            const res = await fetch(`/api/sessions?tool=${tool}&limit=30`);
+        async function loadToolSessions(tool) {
+            const url = tool === 'all' ? '/api/sessions?limit=50' : `/api/sessions?tool=${tool}&limit=50`;
+            const res = await fetch(url);
             const data = await res.json();
-            renderResults((data.sessions || []).map(s => ({...s, content: '', role: ''})));
+            let sessions = (data.sessions || []).map(s => ({...s, content: '', role: ''}));
+            // Sort by date
+            sessions.sort((a, b) => {
+                const da = a.date || a.started_at || '';
+                const db = b.date || b.started_at || '';
+                return sortAsc ? da.localeCompare(db) : db.localeCompare(da);
+            });
+            renderToolResults(tool, sessions);
         }
-        function renderResults(results) {
-            const el = document.getElementById('results');
+        function toggleSort() {
+            sortAsc = !sortAsc;
+            const btn = document.getElementById('sort-btn');
+            btn.textContent = sortAsc ? '⬆ 最旧在前' : '⬇ 最新在前';
+            loadToolSessions(currentTab);
+        }
+        function renderToolResults(tool, results) {
+            const el = document.getElementById('results-' + tool);
             el.innerHTML = results.map(r => `
                 <li class="result-item" onclick="showDetail('${r.session_id || r.id}')">
                     <div class="result-header">
@@ -120,9 +139,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     </div>
                     <div class="result-title">${r.title || 'untitled'}</div>
                     <div class="result-project">📁 ${r.project}</div>
-                    ${r.content ? `<div class="result-preview">${r.content.slice(0,150)}...</div>` : ''}
                 </li>
             `).join('');
+        }
+        async function search() {
+            const query = document.getElementById('search').value;
+            if (!query) { loadToolSessions(currentTab); return; }
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&tool=${currentTab === 'all' ? '' : currentTab}&limit=30`);
+            const data = await res.json();
+            const results = (data.results || []).map(r => ({...r, session_id: r.session_id}));
+            renderToolResults(currentTab, results);
         }
         async function showDetail(sessionId) {
             currentSessionId = sessionId;
@@ -153,7 +179,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             a.click();
         }
         document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
-        loadStats(); loadSessions();
+        loadStats(); loadToolSessions('all');
     </script>
 </body>
 </html>"""

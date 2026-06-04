@@ -137,13 +137,13 @@ class CodexExtractor(BaseExtractor):
 
                     if entry_type == "response_item":
                         role = payload.get("role", "")
-                        if role == "assistant":
+                        if role in ("user", "assistant"):
                             content = self.extract_text(payload.get("content", ""))
                             if content.strip():
                                 timestamps.append(ts)
                                 messages.append(Message(
                                     conversation_id="",
-                                    role="assistant",
+                                    role=role,
                                     content=content,
                                     timestamp=ts,
                                     sequence=len(messages),
@@ -159,11 +159,31 @@ class CodexExtractor(BaseExtractor):
         for msg in messages:
             msg.conversation_id = conv_id
 
+        # Clean title from session_index (may have garbled chars)
+        if title:
+            title = self.clean_codex_title(title)
+
+        # Fallback to first meaningful user message
         if not title:
             for msg in messages:
-                if msg.role == "user":
-                    title = msg.content[:100].replace("\n", " ")
-                    break
+                if msg.role != "user":
+                    continue
+                content = msg.content.strip()
+                if not content or len(content) < 5:
+                    continue
+                # Skip system/environment messages
+                if content.startswith("#"):
+                    continue
+                if content.startswith("<"):
+                    continue
+                if "AGENTS.md" in content:
+                    continue
+                if "environment_context" in content:
+                    continue
+                if "permissions instructions" in content:
+                    continue
+                title = content.replace("\n", " ").strip()[:80]
+                break
 
         return Conversation(
             id=conv_id,

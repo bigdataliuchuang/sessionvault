@@ -216,9 +216,28 @@ class CursorExtractor(BaseExtractor):
 
         title = ""
         for msg in messages:
-            if msg.role == "user":
-                title = msg.content[:100].replace("\n", " ")
-                break
+            if msg.role != "user":
+                continue
+            content = msg.content.strip()
+            if not content or len(content) < 3:
+                continue
+            # Skip file paths, system messages, code blocks
+            if content.startswith("@/") or content.startswith("/"):
+                continue
+            if content.startswith("#"):
+                continue
+            if content.startswith("<"):
+                continue
+            if content.startswith("This project"):
+                continue
+            if content.startswith("For the code"):
+                continue
+            if content.startswith("his project"):
+                continue
+            if content.startswith("Sorry"):
+                continue
+            title = content.replace("\n", " ").strip()[:80]
+            break
 
         return Conversation(
             id=conv_id,

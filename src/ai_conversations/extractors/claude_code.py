@@ -130,9 +130,27 @@ class ClaudeCodeExtractor(BaseExtractor):
 
         if not title and messages:
             for msg in messages:
-                if msg.role == "user":
-                    title = msg.content[:100].replace("\n", " ")
-                    break
+                if msg.role != "user":
+                    continue
+                content = msg.content.strip()
+                if not content or len(content) < 3:
+                    continue
+                # Skip system/command/tool messages
+                if content.startswith("<"):
+                    continue
+                if content.startswith("[{"):
+                    continue
+                if content.startswith("##"):
+                    continue
+                if content.startswith("Create an Agent"):
+                    continue
+                if "tool_result" in content or "tool_use_id" in content:
+                    continue
+                # Skip generic/short titles
+                if content.lower() in self.SKIP_TITLES:
+                    continue
+                title = content.replace("\n", " ").strip()[:80]
+                break
 
         return Conversation(
             id=conv_id,

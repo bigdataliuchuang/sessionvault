@@ -32,6 +32,60 @@ class BaseExtractor(ABC):
         raw = f"{tool}:{session_id}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
+    # Generic/meaningless titles to skip
+    SKIP_TITLES = {
+        "你好", "hello", "hi", "hey", "test", "test1", "1", "ok",
+        "好的", "嗯", "是的", "可以", "帮忙", "请问",
+    }
+
+    @staticmethod
+    def smart_title(text: str, max_len: int = 80) -> str:
+        """Extract a smart title from text.
+
+        - Skips generic/meaningless titles
+        - Truncates at natural boundaries (sentence, clause)
+        - Cleans up whitespace
+        """
+        if not text:
+            return ""
+        # Clean whitespace
+        text = " ".join(text.split()).strip()
+        # Remove markdown code blocks
+        text = text.replace("```", "").strip()
+        # Skip if too short or generic
+        if len(text) < 2:
+            return ""
+        if text.lower() in BaseExtractor.SKIP_TITLES:
+            return ""
+        # Truncate at natural boundary
+        if len(text) > max_len:
+            # Try to cut at sentence boundary
+            for sep in ["。", ".", "！", "!", "？", "?", "，", ",", "；", ";", " "]:
+                idx = text.rfind(sep, 0, max_len)
+                if idx > max_len // 2:
+                    text = text[:idx + 1]
+                    break
+            else:
+                text = text[:max_len - 1] + "…"
+        return text
+
+    @staticmethod
+    def clean_codex_title(title: str) -> str:
+        """Clean up Codex thread_name (remove garbled characters)."""
+        if not title:
+            return ""
+        import re
+        # Remove trailing garbled characters (non-Chinese, non-ASCII letters/digits)
+        # Keep: Chinese chars, English letters, digits, spaces, basic punctuation
+        cleaned = re.sub(r'[^\w\s一-鿿.,!?;:()\-+/]', '', title)
+        # Remove trailing garbage (multiple closing braces, etc.)
+        cleaned = re.sub(r'[}\]）】}》>]+$', '', cleaned)
+        cleaned = cleaned.strip()
+        # If too short after cleaning, skip
+        if len(cleaned) < 2:
+            return ""
+        return cleaned
+
     # Content types to skip (tool calls, system messages, etc.)
     SKIP_TYPES = {"tool_use", "tool_result", "tool_call", "function_call", "function_result"}
 
