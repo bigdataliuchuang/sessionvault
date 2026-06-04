@@ -1,0 +1,30 @@
+/* SessionVault TUI Styles */
+
+Screen {
+    background: $surface;
+}
+
+#app-container {
+    height: 1fr;
+    padding: 1;
+}
+
+#search-input {
+    dock: top;
+    margin-bottom: 1;
+    height: 3;
+}
+
+#filters {
+    dock: top;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#results-table {
+    height: 1fr;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent;
+}

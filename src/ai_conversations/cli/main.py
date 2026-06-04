@@ -9,6 +9,18 @@ from .search import cmd_search, cmd_sessions, cmd_projects, cmd_stats, cmd_expor
 from .serve import cmd_serve
 
 
+def cmd_tui(args):
+    """Launch terminal UI."""
+    from ..tui.app import run_tui
+    run_tui()
+
+
+def cmd_web(args):
+    """Launch web UI."""
+    from ..web.app import run_web
+    run_web(host=args.host, port=args.port)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="sessionvault",
@@ -60,6 +72,16 @@ def main():
     # serve
     p_serve = subparsers.add_parser("serve", help="Start MCP server")
     p_serve.set_defaults(func=cmd_serve)
+
+    # tui
+    p_tui = subparsers.add_parser("tui", help="Launch terminal UI")
+    p_tui.set_defaults(func=cmd_tui)
+
+    # web
+    p_web = subparsers.add_parser("web", help="Launch web UI")
+    p_web.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
+    p_web.add_argument("--port", type=int, default=8080, help="Port to bind (default: 8080)")
+    p_web.set_defaults(func=cmd_web)
 
     args = parser.parse_args()
 
