@@ -129,6 +129,7 @@ class ClaudeCodeExtractor(BaseExtractor):
             msg.conversation_id = conv_id
 
         if not title and messages:
+            # Scan through messages to find a meaningful title
             for msg in messages:
                 if msg.role != "user":
                     continue
@@ -149,8 +150,17 @@ class ClaudeCodeExtractor(BaseExtractor):
                 # Skip generic/short titles
                 if content.lower() in self.SKIP_TITLES:
                     continue
+                # Skip very short messages (< 5 chars)
+                if len(content) < 5:
+                    continue
                 title = content.replace("\n", " ").strip()[:80]
                 break
+
+        # Fallback: use project path as title
+        if not title and project_path:
+            parts = project_path.rstrip("/").split("/")
+            if len(parts) >= 2:
+                title = f"📁 {parts[-1]}"
 
         return Conversation(
             id=conv_id,
